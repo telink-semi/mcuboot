@@ -122,6 +122,10 @@ zephyr_library_sources(
 # library which might be common source code for MCUBoot and an application
 zephyr_link_libraries(MCUBOOT_BOOTUTIL)
 
+zephyr_library_sources(
+  ${BOOT_DIR}/zephyr/telink_boot_zigbee.c
+)
+
 if(CONFIG_BOOT_FIH_PROFILE_HIGH)
 zephyr_library_sources(
   ${BOOT_DIR}/bootutil/src/fault_injection_hardening_delay_rng_mbedtls.c

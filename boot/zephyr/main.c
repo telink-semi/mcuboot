@@ -502,6 +502,9 @@ void main(void)
 
     ZEPHYR_BOOT_LOG_START();
 
+    extern void boot_zigbee_image();
+    boot_zigbee_image();
+
     (void)rc;
 
     mcuboot_status_change(MCUBOOT_STATUS_STARTUP);
