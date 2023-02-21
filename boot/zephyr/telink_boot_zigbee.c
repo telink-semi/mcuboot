@@ -44,7 +44,7 @@ void boot_zigbee_image(void)
     flag_start = (uint8_t *)flag;
 
     BOOT_LOG_INF("Flag bytes:");
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 2; i++)
     {
         BOOT_LOG_INF("Byte %d of flag (%p) = 0x%x", i, (flag_start + i), *(flag_start + i));
     }
@@ -59,37 +59,37 @@ void boot_zigbee_image(void)
         SW_FLG_MATTER_LEAVE = 0x1010        // boot Zigbee
         SW_FLG_IDLE = 0xFFFF,               // boot Zigbee
     */
-    if (*(flag_start + 0) == 0xFF && *(flag_start + 1) == 0xFF && *(flag_start + 2) == 0xFF && *(flag_start + 3) == 0xFF)
+    if (*(flag_start + 0) == 0xFF && *(flag_start + 1) == 0xFF)
     {
         start = (void *)(ZIGBEE_IMAGE_START_ADDRESS);
         BOOT_LOG_INF("Flag: SW_FLG_IDLE");
     }
-    else if (*(flag_start + 0) == 0x05 && *(flag_start + 1) == 0x0A && *(flag_start + 2) == 0x05 && *(flag_start + 3) == 0x0A)
+    else if (*(flag_start + 0) == 0x5A && *(flag_start + 1) == 0x5A)
     {
         start = (void *)(ZIGBEE_IMAGE_START_ADDRESS);
         BOOT_LOG_INF("Flag: SW_FLG_ZB_JOIN_SUCCESS");
     }
-    else if (*(flag_start + 0) == 0x05 && *(flag_start + 1) == 0x00 && *(flag_start + 2) == 0x05 && *(flag_start + 3) == 0x00)
+    else if (*(flag_start + 0) == 0x50 && *(flag_start + 1) == 0x50)
     {
         start = (void *)(MATTER_IMAGE_START_ADDRESS);
         BOOT_LOG_INF("Flag: SW_FLG_ZB_LEAVE");
     }
-    else if (*(flag_start + 0) == 0x07 && *(flag_start + 1) == 0x0A && *(flag_start + 2) == 0x07 && *(flag_start + 3) == 0x0A)
+    else if (*(flag_start + 0) == 0x7A && *(flag_start + 1) == 0x7A)
     {
         start = (void *)(MATTER_IMAGE_START_ADDRESS);
         BOOT_LOG_INF("Flag: SW_FLG_ZB_JOIN_FAIL");
     }
-    else if (*(flag_start + 0) == 0x03 && *(flag_start + 1) == 0x0A && *(flag_start + 2) == 0x03 && *(flag_start + 3) == 0x0A)
+    else if (*(flag_start + 0) == 0x3A && *(flag_start + 1) == 0x3A)
     {
         start = (void *)(ZIGBEE_IMAGE_START_ADDRESS);
         BOOT_LOG_INF("Flag: SW_FLG_MATTER_JOIN_FAIL");
     }
-    else if (*(flag_start + 0) == 0x01 && *(flag_start + 1) == 0x0A && *(flag_start + 2) == 0x01 && *(flag_start + 3) == 0x0A)
+    else if (*(flag_start + 0) == 0x1A && *(flag_start + 1) == 0x1A)
     {
         start = (void *)(MATTER_IMAGE_START_ADDRESS);
         BOOT_LOG_INF("Flag: SW_FLG_MATTER_JOIN_SUCCESS");
     }
-    else if (*(flag_start + 0) == 0x01 && *(flag_start + 1) == 0x00 && *(flag_start + 2) == 0x01 && *(flag_start + 3) == 0x00)
+    else if (*(flag_start + 0) == 0x10 && *(flag_start + 1) == 0x10)
     {
         start = (void *)(ZIGBEE_IMAGE_START_ADDRESS);
         BOOT_LOG_INF("Flag: SW_FLG_MATTER_LEAVE");
