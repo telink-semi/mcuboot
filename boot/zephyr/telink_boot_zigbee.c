@@ -52,8 +52,11 @@ void boot_zigbee_image(void)
     /*
         flag for zigbee or matter:
         SW_FLG_ZB_JOIN_SUCCESS = 0x5A5A,    // boot Zigbee
+        SW_FLG_MATTER_JOIN_FAIL = 0x3A3A    // boot Zigbee
+        SW_FLG_MATTER_JOIN_SUCCESS = 0x1A1A // boot Matter
         SW_FLG_ZB_JOIN_FAIL = 0x7A7A,       // boot Matter
         SW_FLG_ZB_LEAVE = 0x5050,           // boot Matter
+        SW_FLG_MATTER_LEAVE = 0x1010        // boot Zigbee
         SW_FLG_IDLE = 0xFFFF,               // boot Zigbee
     */
     if (*(flag_start + 0) == 0xFF && *(flag_start + 1) == 0xFF && *(flag_start + 2) == 0xFF && *(flag_start + 3) == 0xFF)
@@ -75,6 +78,21 @@ void boot_zigbee_image(void)
     {
         start = (void *)(MATTER_IMAGE_START_ADDRESS);
         BOOT_LOG_INF("Flag: SW_FLG_ZB_JOIN_FAIL");
+    }
+    else if (*(flag_start + 0) == 0x03 && *(flag_start + 1) == 0x0A && *(flag_start + 2) == 0x03 && *(flag_start + 3) == 0x0A)
+    {
+        start = (void *)(ZIGBEE_IMAGE_START_ADDRESS);
+        BOOT_LOG_INF("Flag: SW_FLG_MATTER_JOIN_FAIL");
+    }
+    else if (*(flag_start + 0) == 0x01 && *(flag_start + 1) == 0x0A && *(flag_start + 2) == 0x01 && *(flag_start + 3) == 0x0A)
+    {
+        start = (void *)(MATTER_IMAGE_START_ADDRESS);
+        BOOT_LOG_INF("Flag: SW_FLG_MATTER_JOIN_SUCCESS");
+    }
+    else if (*(flag_start + 0) == 0x01 && *(flag_start + 1) == 0x00 && *(flag_start + 2) == 0x01 && *(flag_start + 3) == 0x00)
+    {
+        start = (void *)(ZIGBEE_IMAGE_START_ADDRESS);
+        BOOT_LOG_INF("Flag: SW_FLG_MATTER_LEAVE");
     }
     else
     {
