@@ -532,8 +532,9 @@ void main(void)
     mcuboot_status_change(MCUBOOT_STATUS_STARTUP);
 
 #ifdef CONFIG_BOOT_SERIAL_ENTRANCE_GPIO
-    if (detect_pin() &&
+    if ((detect_pin() || isDfuTriggered()) &&
             !boot_skip_serial_recovery()) {
+        DfuTriggerReset();
         boot_serial_enter();
     }
 #endif
@@ -548,7 +549,8 @@ void main(void)
 #endif
 
 #if defined(CONFIG_BOOT_USB_DFU_GPIO)
-    if (detect_pin()) {
+    if (detect_pin() || isDfuTriggered()) {
+        DfuTriggerReset();
 #ifdef CONFIG_MCUBOOT_INDICATION_LED
         gpio_pin_set_dt(&led0, 1);
 #endif

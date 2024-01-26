@@ -79,6 +79,7 @@ zephyr_library_sources(
   flash_map_extended.c
   os.c
   keys.c
+  dfu_trigger.c
   )
 
 if(DEFINED CONFIG_ENABLE_MGMT_PERUSER)

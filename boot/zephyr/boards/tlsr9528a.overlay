@@ -1,0 +1,12 @@
+&flash {
+	reg = <0x20000000 0x200000>;
+
+	partitions {
+		/delete-node/ partition@fe000;
+
+		vendor_partition: partition@1fe000 {
+			label = "vendor-data";
+			reg = <0x1fe000 0x2000>;
+		};
+	};
+};
