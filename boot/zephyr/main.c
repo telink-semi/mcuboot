@@ -601,6 +601,70 @@ static void boot_serial_enter()
 }
 #endif
 
+#include <zephyr/drivers/uart.h>
+#include <zephyr/sys/crc.h>
+
+void print_buffer(uint8_t *buffer, size_t size)
+{
+	for (size_t i = 0; i < size; i++) {
+		printk("%c", buffer[i]);
+	}
+}
+
+/* Vendor specific code during MCUBoot startup */
+void telink_b9x_mcu_boot_startup(void)
+{
+	// BOOT_LOG_INF("telink B9x MCUBoot on early boot");
+#if CONFIG_SOC_RISCV_TELINK_B92
+	bool show_chip_id = false;
+
+	/* Check if Console UART RX line is at low level - shorted to ground */
+	const struct device *const uart_con = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+
+	if (device_is_ready(uart_con)) {
+		/**********************************************************************
+		 * Usually function
+		 * uart_err_check(uart_con)
+		 * should be called to detect low level at RX line - break condition.
+		 * But on B92 platform this condition is not detected. Instead of it:
+		 * - low level at RX line is treated as start bit
+		 * - all data bits are received as zeros
+		 * - parity bit (if exists) and stop bits are ignored
+		 * - received zero byte becomes into UART FIFO and no future reception
+		 * So lets check RX line low level by this way...
+		 **********************************************************************/
+		uint8_t ch;
+
+		if (!uart_poll_in(uart_con, &ch)) {
+			if (!ch) {
+				if (uart_poll_in(uart_con, &ch) == -1) {
+					show_chip_id = true;
+				}
+			}
+		}
+	} else {
+		BOOT_LOG_ERR("uart console not ready");
+	}
+
+	if (show_chip_id) {
+		extern unsigned char efuse_get_chip_id(unsigned char *chip_id_buff);
+		uint8_t chip_id[21] = {0};
+
+		if (efuse_get_chip_id(chip_id + 2)) {
+			uint16_t chip_id_crc = crc16_itu_t(0, chip_id + 2, 16);
+			chip_id[0] = 0xaa;
+			chip_id[1] = 0x12;
+			chip_id[18] = chip_id_crc & 0x00ff;
+			chip_id[19] = chip_id_crc >> 8;
+			chip_id[20] = 0x55;
+			print_buffer(chip_id, sizeof(chip_id));
+		} else {
+			BOOT_LOG_ERR("chip id read error");
+		}
+	}
+#endif /* CONFIG_SOC_RISCV_TELINK_B92 */
+}
+
 void main(void)
 {
     struct boot_rsp rsp;
@@ -632,6 +696,8 @@ void main(void)
     os_heap_init();
 
     ZEPHYR_BOOT_LOG_START();
+
+    telink_b9x_mcu_boot_startup();
 
     (void)rc;
 
