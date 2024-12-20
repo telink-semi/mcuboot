@@ -42,6 +42,9 @@
 #include "bootutil/mcuboot_status.h"
 #include "flash_map_backend/flash_map_backend.h"
 
+#include <ext_driver/ext_pm.h>
+#include <zephyr/device.h>
+#include <zephyr/storage/flash_map.h>
 #ifdef CONFIG_MCUBOOT_SERIAL
 #include "boot_serial/boot_serial.h"
 #include "serial_adapter/serial_adapter.h"
@@ -319,6 +322,51 @@ static void do_boot(struct boot_rsp *rsp)
  * lock interrupts and jump there. This is the right thing to do for X86 and
  * possibly other platforms.
  */
+#define USER_PARTITION		user_para_partition
+#define USER_PARTITION_DEVICE	FIXED_PARTITION_DEVICE(USER_PARTITION)
+#define USER_PARTITION_OFFSET	FIXED_PARTITION_OFFSET(USER_PARTITION)
+#define USER_PARTITION_SIZE 	FIXED_PARTITION_SIZE(USER_PARTITION) 
+
+#define SLOT0_PARTITION		slot0_partition
+#define SLOT0_PARTITION_DEVICE	FIXED_PARTITION_DEVICE(SLOT0_PARTITION)
+#define SLOT0_PARTITION_OFFSET	FIXED_PARTITION_OFFSET(SLOT0_PARTITION)
+
+#if CONFIG_SOC_SERIES_RISCV_TELINK_TLX
+#define SLOT0_ZB_OFFSET     (0xF6000)
+#else
+#define SLOT0_ZB_OFFSET     (0x154000)
+#endif
+
+#define USER_MATTER_PAIR_VAL    0x55  // jump to matter
+
+#define USER_INIT_VAL           0xff  // init state or others will go into zb 
+#define USER_ZB_SW_VAL          0xaa  // jump to matter,use XIP
+#define USER_MATTER_BACK_ZB     0xa0  // only commisiion fail will back to zb 
+
+#define ZB_FW_FLAG_OFFSET       0x20 //telink fw valid flag offset .
+
+const struct device * flash_para_dev = USER_PARTITION_DEVICE;
+const struct device * flash_slot0_dev = SLOT0_PARTITION_DEVICE;
+const uint8_t zb_fw_flag[4]={ 0x4b, 0x4e, 0x4c, 0x54};
+uint8_t zb_slot0_flag[4];
+
+static void restore_all_irq_priorities(void)
+{
+    #if CONFIG_SOC_SERIES_RISCV_TELINK_TLX 
+    #define PLIC_PRIO (0xc4000000)
+    #elif CONFIG_SOC_SERIES_RISCV_TELINK_B9X
+    #define PLIC_PRIO (0xe4000000)
+    #endif  
+    #define PLIC_IRQS (CONFIG_NUM_IRQS - CONFIG_2ND_LVL_ISR_TBL_OFFSET)
+    volatile uint32_t *prio = (volatile uint32_t *)PLIC_PRIO;
+    int i;
+    for(i=1;i<PLIC_IRQS;i++)
+    {
+        *prio = 1U;
+        prio++;
+    }
+}
+
 static void do_boot(struct boot_rsp *rsp)
 {
     void *start;
@@ -332,12 +380,41 @@ static void do_boot(struct boot_rsp *rsp)
     rc = flash_device_base(rsp->br_flash_dev_id, &flash_base);
     assert(rc == 0);
 
-    start = (void *)(flash_base + rsp->br_image_off +
-                     rsp->br_hdr->ih_hdr_size);
+    
 #endif
+    /* Uncomment the following lines for debug purposes */
 
-    /* Lock interrupts and dive into the entry point */
-    irq_lock();
+    /* Read the boot flag from the user partition to determine the boot behavior */
+    uint8_t boot_flag=0;
+    flash_read(flash_para_dev, USER_PARTITION_OFFSET, &boot_flag, 1);
+    printk("boot flag is  %x \n",boot_flag);
+
+    /* Get the Zigbee firmware flag from slot1 partition */
+    flash_read(flash_slot0_dev, SLOT0_ZB_OFFSET + ZB_FW_FLAG_OFFSET, zb_slot0_flag, sizeof(zb_slot0_flag));
+    if (memcmp(zb_slot0_flag, zb_fw_flag, sizeof(zb_fw_flag))){
+        /* Zigbee firmware flag not found, boot to Matter */
+        printk("Zigbee flag not found \n");
+        start = (void *)(flash_base + rsp->br_image_off +
+                        rsp->br_hdr->ih_hdr_size);
+    }else{
+        if( boot_flag == USER_MATTER_PAIR_VAL ){
+            /* only paired will switch to matter , Commissioning success flag  */
+            start = (void *)(flash_base + rsp->br_image_off +
+                        rsp->br_hdr->ih_hdr_size);
+        }else{
+            /*others it will go into zigbee */
+            restore_all_irq_priorities();
+            irq_lock();
+            reg_irq_src0=0;
+            reg_irq_src1=0;
+            core_interrupt_disable();
+            start = (void *)(flash_base + SLOT0_ZB_OFFSET);
+        }
+    }
+
+    // Print the start address for debugging
+    printk("start adr is %x \n",start);
+
     ((void (*)(void))start)();
 }
 #endif
@@ -495,6 +572,70 @@ static void boot_serial_enter()
 }
 #endif
 
+#include <zephyr/drivers/uart.h>
+#include <zephyr/sys/crc.h>
+
+void print_buffer(uint8_t *buffer, size_t size)
+{
+	for (size_t i = 0; i < size; i++) {
+		printk("%c", buffer[i]);
+	}
+}
+
+/* Vendor specific code during MCUBoot startup */
+void telink_b9x_mcu_boot_startup(void)
+{
+	// BOOT_LOG_INF("telink B9x MCUBoot on early boot");
+#if CONFIG_SOC_RISCV_TELINK_B92
+	bool show_chip_id = false;
+
+	/* Check if Console UART RX line is at low level - shorted to ground */
+	const struct device *const uart_con = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+
+	if (device_is_ready(uart_con)) {
+		/**********************************************************************
+		 * Usually function
+		 * uart_err_check(uart_con)
+		 * should be called to detect low level at RX line - break condition.
+		 * But on B92 platform this condition is not detected. Instead of it:
+		 * - low level at RX line is treated as start bit
+		 * - all data bits are received as zeros
+		 * - parity bit (if exists) and stop bits are ignored
+		 * - received zero byte becomes into UART FIFO and no future reception
+		 * So lets check RX line low level by this way...
+		 **********************************************************************/
+		uint8_t ch;
+
+		if (!uart_poll_in(uart_con, &ch)) {
+			if (!ch) {
+				if (uart_poll_in(uart_con, &ch) == -1) {
+					show_chip_id = true;
+				}
+			}
+		}
+	} else {
+		BOOT_LOG_ERR("uart console not ready");
+	}
+
+	if (show_chip_id) {
+		extern unsigned char efuse_get_chip_id(unsigned char *chip_id_buff);
+		uint8_t chip_id[21] = {0};
+
+		if (efuse_get_chip_id(chip_id + 2)) {
+			uint16_t chip_id_crc = crc16_itu_t(0, chip_id + 2, 16);
+			chip_id[0] = 0xaa;
+			chip_id[1] = 0x12;
+			chip_id[18] = chip_id_crc & 0x00ff;
+			chip_id[19] = chip_id_crc >> 8;
+			chip_id[20] = 0x55;
+			print_buffer(chip_id, sizeof(chip_id));
+		} else {
+			BOOT_LOG_ERR("chip id read error");
+		}
+	}
+#endif /* CONFIG_SOC_RISCV_TELINK_B92 */
+}
+
 void main(void)
 {
     struct boot_rsp rsp;
@@ -526,6 +667,8 @@ void main(void)
     os_heap_init();
 
     ZEPHYR_BOOT_LOG_START();
+
+    telink_b9x_mcu_boot_startup();
 
     (void)rc;
 
