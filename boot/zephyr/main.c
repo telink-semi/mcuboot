@@ -347,7 +347,7 @@ static void do_boot(struct boot_rsp *rsp)
 
 const struct device * flash_para_dev = USER_PARTITION_DEVICE;
 const struct device * flash_slot0_dev = SLOT0_PARTITION_DEVICE;
-const uint8_t zb_fw_flag[4]={ 0x4b, 0x4e, 0x4c, 0x54};
+const uint8_t zb_fw_flag[4]={ 0x4b, 0x4e, 0x4c, 0x54 };
 uint8_t zb_slot0_flag[4];
 
 static void restore_all_irq_priorities(void)
@@ -360,7 +360,7 @@ static void restore_all_irq_priorities(void)
     #define PLIC_IRQS (CONFIG_NUM_IRQS - CONFIG_2ND_LVL_ISR_TBL_OFFSET)
     volatile uint32_t *prio = (volatile uint32_t *)PLIC_PRIO;
     int i;
-    for(i=1;i<PLIC_IRQS;i++)
+    for (i = 1; i < PLIC_IRQS; i++)
     {
         *prio = 1U;
         prio++;
@@ -379,41 +379,37 @@ static void do_boot(struct boot_rsp *rsp)
 
     rc = flash_device_base(rsp->br_flash_dev_id, &flash_base);
     assert(rc == 0);
-
-    
 #endif
-    /* Uncomment the following lines for debug purposes */
-
-    /* Read the boot flag from the user partition to determine the boot behavior */
-    uint8_t boot_flag=0;
+    /* read the boot flag from the user partition to determine the boot behavior */
+    uint8_t boot_flag = 0;
     flash_read(flash_para_dev, USER_PARTITION_OFFSET, &boot_flag, 1);
-    printk("boot flag is  %x \n",boot_flag);
+    printk("boot flag: 0x%x\n", boot_flag);
 
-    /* Get the Zigbee firmware flag from slot1 partition */
+    /* read the Zigbee firmware flag from the slot1 partition */
     flash_read(flash_slot0_dev, SLOT0_ZB_OFFSET + ZB_FW_FLAG_OFFSET, zb_slot0_flag, sizeof(zb_slot0_flag));
     if (memcmp(zb_slot0_flag, zb_fw_flag, sizeof(zb_fw_flag))){
-        /* Zigbee firmware flag not found, boot to Matter */
-        printk("Zigbee flag not found \n");
+        /* default to Matter if Zigbee firmware flag not found */
+        printk("Zigbee firmware flag not found.\n");
         start = (void *)(flash_base + rsp->br_image_off +
                         rsp->br_hdr->ih_hdr_size);
-    }else{
-        if( boot_flag == USER_MATTER_PAIR_VAL ){
-            /* only paired will switch to matter , Commissioning success flag  */
+    } else {
+        if ( boot_flag == USER_MATTER_PAIR_VAL ) {
+            /* switch to Matter only if commissioned (paired) */
             start = (void *)(flash_base + rsp->br_image_off +
                         rsp->br_hdr->ih_hdr_size);
-        }else{
-            /*others it will go into zigbee */
+        } else {
+            /* Otherwise, switch to Zigbee */
             restore_all_irq_priorities();
             irq_lock();
-            reg_irq_src0=0;
-            reg_irq_src1=0;
+            reg_irq_src0 = 0;
+            reg_irq_src1 = 0;
             core_interrupt_disable();
             start = (void *)(flash_base + SLOT0_ZB_OFFSET);
         }
     }
 
-    // Print the start address for debugging
-    printk("start adr is %x \n",start);
+    /* print the start address for debugging */
+    printk("start address: 0x%x\n", (uint32_t)start);
 
     ((void (*)(void))start)();
 }
@@ -582,14 +578,14 @@ void print_buffer(uint8_t *buffer, size_t size)
 	}
 }
 
-/* Vendor specific code during MCUBoot startup */
-void telink_b9x_mcu_boot_startup(void)
+/* Vendor-specific code executed during MCUBoot startup */
+void telink_mcu_boot_startup(void)
 {
-	// BOOT_LOG_INF("telink B9x MCUBoot on early boot");
+	/* BOOT_LOG_INF("Telink MCUBoot on early boot"); */
 #if CONFIG_SOC_RISCV_TELINK_B92
 	bool show_chip_id = false;
 
-	/* Check if Console UART RX line is at low level - shorted to ground */
+	/* Check if the console UART RX line is held low (shorted to ground). */
 	const struct device *const uart_con = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 	if (device_is_ready(uart_con)) {
@@ -614,7 +610,7 @@ void telink_b9x_mcu_boot_startup(void)
 			}
 		}
 	} else {
-		BOOT_LOG_ERR("uart console not ready");
+		BOOT_LOG_ERR("UART console device not ready");
 	}
 
 	if (show_chip_id) {
@@ -630,7 +626,7 @@ void telink_b9x_mcu_boot_startup(void)
 			chip_id[20] = 0x55;
 			print_buffer(chip_id, sizeof(chip_id));
 		} else {
-			BOOT_LOG_ERR("chip id read error");
+			BOOT_LOG_ERR("Failed to read Chip ID");
 		}
 	}
 #endif /* CONFIG_SOC_RISCV_TELINK_B92 */
@@ -668,7 +664,7 @@ void main(void)
 
     ZEPHYR_BOOT_LOG_START();
 
-    telink_b9x_mcu_boot_startup();
+    telink_mcu_boot_startup();
 
     (void)rc;
 
