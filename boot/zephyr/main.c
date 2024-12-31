@@ -616,31 +616,32 @@ void telink_b9x_mcu_boot_startup(void)
 {
 	// BOOT_LOG_INF("telink B9x MCUBoot on early boot");
 #if CONFIG_SOC_RISCV_TELINK_B92
+	#include <zephyr/dt-bindings/pinctrl/b92-pinctrl.h>
 	bool show_chip_id = false;
 
 	/* Check if Console UART RX line is at low level - shorted to ground */
 	const struct device *const uart_con = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 	if (device_is_ready(uart_con)) {
-		/**********************************************************************
-		 * Usually function
-		 * uart_err_check(uart_con)
-		 * should be called to detect low level at RX line - break condition.
-		 * But on B92 platform this condition is not detected. Instead of it:
-		 * - low level at RX line is treated as start bit
-		 * - all data bits are received as zeros
-		 * - parity bit (if exists) and stop bits are ignored
-		 * - received zero byte becomes into UART FIFO and no future reception
-		 * So lets check RX line low level by this way...
-		 **********************************************************************/
-		uint8_t ch;
 
-		if (!uart_poll_in(uart_con, &ch)) {
-			if (!ch) {
-				if (uart_poll_in(uart_con, &ch) == -1) {
-					show_chip_id = true;
-				}
-			}
+		/* Use the uart corresponding to your zephyr_console configuration */
+		#define UART_RX_PINMUX \
+			DT_PROP(DT_PINCTRL_BY_IDX(DT_NODELABEL(uart0), 0, 1), pinmux)
+		gpio_pin_e uart_rx = B9x_PINMUX_GET_PIN(UART_RX_PINMUX);
+
+		/* Disable The UART RX PIN */
+		gpio_set_low_level(uart_rx);
+		gpio_output_dis(uart_rx);
+		gpio_function_dis(uart_rx);
+
+		/* Enable The UART RX PIN GPIO Function */
+		gpio_function_en(uart_rx);
+		gpio_input_en(uart_rx);
+		gpio_set_up_down_res(uart_rx, GPIO_PIN_PULLUP_10K);
+
+		/* Check if Console UART RX PIN is at low level - shorted to ground */
+		if (gpio_get_level(uart_rx) == 0) {
+			show_chip_id = true;
 		}
 	} else {
 		BOOT_LOG_ERR("uart console not ready");
