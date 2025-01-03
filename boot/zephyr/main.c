@@ -589,58 +589,78 @@ void print_buffer(uint8_t *buffer, size_t size)
 	}
 }
 
+#define HEADER_MAGIC1  0xAA
+#define HEADER_MAGIC2  0x12
+#define TRAILER_MAGIC  0x55
+
 /* Vendor-specific code executed during MCUBoot startup */
 void telink_mcu_boot_startup(void)
 {
 	/* BOOT_LOG_INF("Telink MCUBoot on early boot"); */
+#if (CONFIG_SOC_RISCV_TELINK_B92 || CONFIG_SOC_RISCV_TELINK_TL321X)
 #if CONFIG_SOC_RISCV_TELINK_B92
+	#include <zephyr/dt-bindings/pinctrl/b92-pinctrl.h>
+#elif CONFIG_SOC_RISCV_TELINK_TL321X
+	#include <zephyr/dt-bindings/pinctrl/tl321x-pinctrl.h>
+#endif
+
 	bool show_chip_id = false;
 
 	/* Check if the console UART RX line is held low (shorted to ground). */
 	const struct device *const uart_con = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 	if (device_is_ready(uart_con)) {
-		/**********************************************************************
-		 * Usually function
-		 * uart_err_check(uart_con)
-		 * should be called to detect low level at RX line - break condition.
-		 * But on B92 platform this condition is not detected. Instead of it:
-		 * - low level at RX line is treated as start bit
-		 * - all data bits are received as zeros
-		 * - parity bit (if exists) and stop bits are ignored
-		 * - received zero byte becomes into UART FIFO and no future reception
-		 * So lets check RX line low level by this way...
-		 **********************************************************************/
-		uint8_t ch;
 
-		if (!uart_poll_in(uart_con, &ch)) {
-			if (!ch) {
-				if (uart_poll_in(uart_con, &ch) == -1) {
-					show_chip_id = true;
-				}
-			}
+		/* Use the uart corresponding to your zephyr_console configuration */
+		#define UART_RX_PINMUX \
+			DT_PROP(DT_PINCTRL_BY_IDX(DT_NODELABEL(uart0), 0, 1), pinmux)
+
+		#if CONFIG_SOC_RISCV_TELINK_B92
+			gpio_pin_e uart_rx = B9x_PINMUX_GET_PIN(UART_RX_PINMUX);
+		#elif CONFIG_SOC_RISCV_TELINK_TL321X
+			gpio_pin_e uart_rx = TLX_PINMUX_GET_PIN(UART_RX_PINMUX);
+		#endif
+
+		/* Disable The UART RX PIN */
+		gpio_set_low_level(uart_rx);
+		gpio_output_dis(uart_rx);
+		gpio_function_dis(uart_rx);
+
+		/* Enable The UART RX PIN GPIO Function */
+		gpio_function_en(uart_rx);
+		gpio_input_en(uart_rx);
+		gpio_set_up_down_res(uart_rx, GPIO_PIN_PULLUP_10K);
+
+		/* Check if Console UART RX PIN is at low level - shorted to ground */
+		if (gpio_get_level(uart_rx) == 0) {
+			show_chip_id = true;
 		}
 	} else {
 		BOOT_LOG_ERR("UART console device not ready");
 	}
 
 	if (show_chip_id) {
-		extern unsigned char efuse_get_chip_id(unsigned char *chip_id_buff);
 		uint8_t chip_id[21] = {0};
-
-		if (efuse_get_chip_id(chip_id + 2)) {
-			uint16_t chip_id_crc = crc16_itu_t(0, chip_id + 2, 16);
-			chip_id[0] = 0xaa;
-			chip_id[1] = 0x12;
-			chip_id[18] = chip_id_crc & 0x00ff;
-			chip_id[19] = chip_id_crc >> 8;
-			chip_id[20] = 0x55;
-			print_buffer(chip_id, sizeof(chip_id));
-		} else {
-			BOOT_LOG_ERR("Failed to read Chip ID");
-		}
+		#if CONFIG_SOC_RISCV_TELINK_B92
+			extern unsigned char efuse_get_chip_id(unsigned char *chip_id_buff);
+			if (efuse_get_chip_id(chip_id + 2))
+		#elif CONFIG_SOC_RISCV_TELINK_TL321X
+			extern drv_api_status_e efuse_get_chip_id(unsigned char *chip_id_buff);
+			if (efuse_get_chip_id(chip_id + 2) == DRV_API_SUCCESS)
+		#endif
+			{
+				uint16_t chip_id_crc = crc16_itu_t(0, chip_id + 2, 16);
+				chip_id[0] = HEADER_MAGIC1;
+				chip_id[1] = HEADER_MAGIC2;
+				chip_id[18] = chip_id_crc & 0x00ff;
+				chip_id[19] = chip_id_crc >> 8;
+				chip_id[20] = TRAILER_MAGIC;
+				print_buffer(chip_id, sizeof(chip_id));
+			} else {
+				BOOT_LOG_ERR("Failed to read Chip ID");
+			}
 	}
-#endif /* CONFIG_SOC_RISCV_TELINK_B92 */
+#endif /*(CONFIG_SOC_RISCV_TELINK_B92 || CONFIG_SOC_RISCV_TELINK_TL321X)*/
 }
 
 void main(void)
