@@ -319,7 +319,6 @@ static void do_boot(struct boot_rsp *rsp)
  * lock interrupts and jump there. This is the right thing to do for X86 and
  * possibly other platforms.
  */
-#if (CONFIG_SOC_RISCV_TELINK_TL321X || CONFIG_SOC_RISCV_TELINK_B92)
 #include <ext_driver/ext_pm.h>
 #include <zephyr/device.h>
 #include <zephyr/storage/flash_map.h>
@@ -335,7 +334,7 @@ static void do_boot(struct boot_rsp *rsp)
 
 #if CONFIG_SOC_SERIES_RISCV_TELINK_TLX
 #define SLOT0_ZB_OFFSET     (0xF6000)
-#else
+#elif CONFIG_SOC_SERIES_RISCV_TELINK_B9X
 #define SLOT0_ZB_OFFSET     (0x154000)
 #endif
 
@@ -368,7 +367,6 @@ static void restore_all_irq_priorities(void)
         prio++;
     }
 }
-#endif
 
 static void do_boot(struct boot_rsp *rsp)
 {
@@ -387,7 +385,6 @@ static void do_boot(struct boot_rsp *rsp)
                      rsp->br_hdr->ih_hdr_size);
 #endif
 
-#if (CONFIG_SOC_RISCV_TELINK_TL321X || CONFIG_SOC_RISCV_TELINK_B92)
     /* read the boot flag from the user partition to determine the boot behavior */
     uint8_t boot_flag = 0;
     flash_read(flash_para_dev, USER_PARTITION_OFFSET, &boot_flag, 1);
@@ -418,10 +415,10 @@ static void do_boot(struct boot_rsp *rsp)
 
     /* print the start address for debugging */
     printk("start address: 0x%x\n", (uint32_t)start);
-#else
+
     /* Lock interrupts and dive into the entry point */
-    irq_lock();
-#endif
+    // irq_lock();
+
     ((void (*)(void))start)();
 }
 #endif
