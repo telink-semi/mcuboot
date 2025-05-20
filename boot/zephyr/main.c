@@ -319,7 +319,7 @@ static void do_boot(struct boot_rsp *rsp)
  * lock interrupts and jump there. This is the right thing to do for X86 and
  * possibly other platforms.
  */
-#if (CONFIG_SOC_RISCV_TELINK_TL321X || CONFIG_SOC_RISCV_TELINK_B92)
+#if CONFIG_DUAL_MODE
 #include <ext_driver/ext_pm.h>
 #include <zephyr/device.h>
 #include <zephyr/storage/flash_map.h>
@@ -335,7 +335,7 @@ static void do_boot(struct boot_rsp *rsp)
 
 #if CONFIG_SOC_SERIES_RISCV_TELINK_TLX
 #define SLOT0_ZB_OFFSET     (0xF6000)
-#else
+#elif CONFIG_SOC_SERIES_RISCV_TELINK_B9X
 #define SLOT0_ZB_OFFSET     (0x154000)
 #endif
 
@@ -387,7 +387,7 @@ static void do_boot(struct boot_rsp *rsp)
                      rsp->br_hdr->ih_hdr_size);
 #endif
 
-#if (CONFIG_SOC_RISCV_TELINK_TL321X || CONFIG_SOC_RISCV_TELINK_B92)
+#if CONFIG_DUAL_MODE
     /* read the boot flag from the user partition to determine the boot behavior */
     uint8_t boot_flag = 0;
     flash_read(flash_para_dev, USER_PARTITION_OFFSET, &boot_flag, 1);
@@ -579,6 +579,7 @@ static void boot_serial_enter()
 }
 #endif
 
+#if CONFIG_DUAL_MODE
 #include <zephyr/drivers/uart.h>
 #include <zephyr/sys/crc.h>
 
@@ -662,6 +663,7 @@ void telink_mcu_boot_startup(void)
 	}
 #endif /*(CONFIG_SOC_RISCV_TELINK_B92 || CONFIG_SOC_RISCV_TELINK_TL321X)*/
 }
+#endif
 
 void main(void)
 {
@@ -695,7 +697,9 @@ void main(void)
 
     ZEPHYR_BOOT_LOG_START();
 
+#if CONFIG_DUAL_MODE
     telink_mcu_boot_startup();
+#endif
 
     (void)rc;
 
