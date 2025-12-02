@@ -319,6 +319,7 @@ static void do_boot(struct boot_rsp *rsp)
  * lock interrupts and jump there. This is the right thing to do for X86 and
  * possibly other platforms.
  */
+#if CONFIG_DUAL_MODE
 #include <zephyr/device.h>
 #include <ext_driver/ext_pm.h>
 
@@ -398,6 +399,7 @@ static void jump_zb_prepare(void)
     reg_irq_src1=0;
     core_interrupt_disable();
 }
+#endif /* CONFIG_DUAL_MODE */
 
 static void do_boot(struct boot_rsp *rsp)
 {
@@ -415,7 +417,7 @@ static void do_boot(struct boot_rsp *rsp)
     start = (void *)(flash_base + rsp->br_image_off +
                      rsp->br_hdr->ih_hdr_size);
 #endif
-
+#if CONFIG_DUAL_MODE
     /* Get the Zigbee firmware flag from slot1 partition */
     uint8_t zb_fw_flag[4];
     flash_read(flash_zb_dev, ZIGBEE_PARTITION_OFFSET + ZB_FW_FLAG_OFFSET, zb_fw_flag, sizeof(zb_fw_flag));
@@ -443,7 +445,7 @@ static void do_boot(struct boot_rsp *rsp)
 
     // Print the start address for debugging
     printk("start adr is %x \n",start);
-
+#endif /* CONFIG_DUAL_MODE */
     ((void (*)(void))start)();
 }
 #endif
