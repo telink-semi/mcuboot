@@ -443,8 +443,12 @@ int main(void)
     int rc;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
+#if CONFIG_WATCHDOG_AUTO
+
+#else
     MCUBOOT_WATCHDOG_SETUP();
     MCUBOOT_WATCHDOG_FEED();
+#endif /* CONFIG_WATCHDOG_AUTO */
 
 #if !defined(MCUBOOT_DIRECT_XIP)
     BOOT_LOG_INF("Starting bootloader");
