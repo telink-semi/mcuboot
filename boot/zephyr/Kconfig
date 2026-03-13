@@ -311,7 +311,7 @@ config BOOT_VALIDATE_SLOT0
 
 config BOOT_VALIDATE_SLOT0_ONCE
 	bool "Validate image in the primary slot just once after after upgrade"
-	depends on !BOOT_VALIDATE_SLOT0 && SINGLE_APPLICATION_SLOT
+	depends on !BOOT_VALIDATE_SLOT0
 	default n
 	help
 	  If y, the bootloader attempts to validate the signature of the

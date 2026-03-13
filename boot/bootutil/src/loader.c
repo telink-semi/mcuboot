@@ -1186,6 +1186,96 @@ out:
     FIH_RET(fih_rc);
 }
 
+#if defined(MCUBOOT_VALIDATE_PRIMARY_SLOT_ONCE)
+/**
+ * Validate hash of a primary boot image.
+ *
+ * @param[in]	fa_p	flash area pointer
+ * @param[in]	hdr	boot image header pointer
+ *
+ * @return		FIH_SUCCESS on success, error code otherwise
+ */
+fih_ret
+boot_image_validate(const struct flash_area *fa_p,
+                    struct image_header *hdr)
+{
+    static uint8_t tmpbuf[BOOT_TMPBUF_SZ];
+    FIH_DECLARE(fih_rc, FIH_FAILURE);
+
+    /* NOTE: The first argument to boot_image_validate, for enc_state pointer,
+     * is allowed to be NULL only because the single image loader compiles
+     * with BOOT_IMAGE_NUMBER == 1, which excludes the code that uses
+     * the pointer from compilation.
+     */
+    /* Validate hash */
+    if (IS_ENCRYPTED(hdr))
+    {
+        /* Clear the encrypted flag we didn't supply a key
+         * This flag could be set if there was a decryption in place
+         * was performed. We will try to validate the image, and if still
+         * encrypted the validation will fail, and go in panic mode
+         */
+        hdr->ih_flags &= ~(ENCRYPTIONFLAGS);
+    }
+    FIH_CALL(bootutil_img_validate, fih_rc, NULL, hdr, fa_p, tmpbuf,
+             BOOT_TMPBUF_SZ, NULL, 0, NULL);
+
+    FIH_RET(fih_rc);
+}
+#endif /* MCUBOOT_VALIDATE_PRIMARY_SLOT */
+
+inline static fih_ret
+boot_image_validate_once(const struct flash_area *fa_p,
+                    struct image_header *hdr)
+{
+    static struct boot_swap_state swap_state;
+    int rc;
+    FIH_DECLARE(fih_rc, FIH_FAILURE);
+
+    memset(&swap_state, 0, sizeof(struct boot_swap_state));
+    rc = boot_read_swap_state_by_id(flash_area_get_id(fa_p), &swap_state);
+    if (rc != 0) {
+        FIH_RET(FIH_FAILURE);
+    }
+
+    BOOT_LOG_DBG("swap_state.magic: 0x%08x", swap_state.magic);
+    BOOT_LOG_DBG("swap_state.image_ok: 0x%02x", swap_state.image_ok);
+
+    if (swap_state.magic != BOOT_MAGIC_GOOD
+            || swap_state.image_ok != BOOT_FLAG_SET) {
+
+        /* At least validate the image once */
+        FIH_CALL(boot_image_validate, fih_rc, fa_p, hdr);
+
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+            BOOT_LOG_ERR("Image validation failed");
+            FIH_RET(FIH_FAILURE);
+        }
+
+
+        if (swap_state.magic != BOOT_MAGIC_GOOD) {
+            rc = boot_write_magic(fa_p);
+            if (rc != 0){
+                BOOT_LOG_ERR("Failed to write BOOT_MAGIC_GOOD");
+                FIH_RET(FIH_FAILURE);
+            }
+
+        }
+
+        rc = boot_write_image_ok(fa_p);
+        if (rc != 0){
+            BOOT_LOG_ERR("Failed to write BOOT_FLAG_SET");
+            FIH_RET(FIH_FAILURE);
+        }
+
+        BOOT_LOG_INF("Image validation succeeded, wrote BOOT_MAGIC_GOOD and BOOT_FLAG_SET");
+    } else {
+        BOOT_LOG_INF("swap_state indicates valid image, skipping validation");
+    }
+
+    FIH_RET(FIH_SUCCESS);
+}
+
 #ifdef MCUBOOT_HW_ROLLBACK_PROT
 /**
  * Updates the stored security counter value with the image's security counter
@@ -2498,6 +2588,13 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS) ||
             FIH_EQ(fih_rc, FIH_FAILURE) ||
             FIH_EQ(fih_rc, FIH_NO_BOOTABLE_IMAGE)) {
+            FIH_SET(fih_rc, FIH_FAILURE);
+            goto out;
+        }
+#elif defined(MCUBOOT_VALIDATE_PRIMARY_SLOT_ONCE)
+        FIH_CALL(boot_image_validate_once, fih_rc, BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT),
+                 boot_img_hdr(state, BOOT_PRIMARY_SLOT));
+        if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
             FIH_SET(fih_rc, FIH_FAILURE);
             goto out;
         }
