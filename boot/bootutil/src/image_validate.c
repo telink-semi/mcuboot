@@ -155,7 +155,9 @@ bootutil_img_hash(struct boot_loader_state *state,
     /* No chunk loading, storage is mapped to address space and can
      * be directly given to hashing function.
      */
-    bootutil_sha_update(&sha_ctx, (void *)flash_area_get_off(fap), size);
+#define TL_FLASH_BASE_ADDR 0x20000000
+
+    bootutil_sha_update(&sha_ctx, (void *)(TL_FLASH_BASE_ADDR + flash_area_get_off(fap)), size);
 #else /* MCUBOOT_HASH_STORAGE_DIRECTLY */
 #ifdef MCUBOOT_RAM_LOAD
     bootutil_sha_update(&sha_ctx,
