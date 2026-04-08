@@ -1222,7 +1222,6 @@ boot_image_validate(const struct flash_area *fa_p,
 
     FIH_RET(fih_rc);
 }
-#endif /* MCUBOOT_VALIDATE_PRIMARY_SLOT */
 
 inline static fih_ret
 boot_image_validate_once(const struct flash_area *fa_p,
@@ -1275,6 +1274,7 @@ boot_image_validate_once(const struct flash_area *fa_p,
 
     FIH_RET(FIH_SUCCESS);
 }
+#endif /* MCUBOOT_VALIDATE_PRIMARY_SLOT */
 
 #ifdef MCUBOOT_HW_ROLLBACK_PROT
 /**
